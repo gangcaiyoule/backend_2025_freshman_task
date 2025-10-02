@@ -119,8 +119,26 @@ func main() {
 	r.GET("/history", AuthMiddleware(), GetHistoryHandle)
 	r.POST("/recharge", AuthMiddleware(), ReCharge)
 	r.GET("/getModel", AuthMiddleware(), GetModel)
+	r.GET("/logout", logout)
 
 	r.Run(":8080")
+}
+
+func logout(c *gin.Context) {
+	token, err := c.Cookie("session_token")
+	if err != nil {
+		log.Printf("logout: token获取失败: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	_, err = db.Exec("DELETE FROM sessions WHERE token = ?", token)
+	if err != nil {
+		log.Printf("token从数据库删除失败%v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.SetCookie("session_token", "", -1, "/", "", false, true)
+
 }
 
 func GetModel(c *gin.Context) {
@@ -294,30 +312,28 @@ func LoginHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
-
+	//设置cookie
+	c.SetCookie("session_token", token, 3600*24, "/", "", false, true)
+	fmt.Println("Set cookie session_token:", token)
 	// 返回响应
-	c.JSON(http.StatusOK, LoginResponse{
-		Token:  token,
-		UserID: userID,
+	c.JSON(http.StatusOK, gin.H{
+		"message": "登录成功",
+		"user_id": userID,
 	})
 }
 
 // 鉴权中间件
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization") // 假设格式 "Bearer <token>"
-		if token == "" {
+		token, err := c.Cookie("session_token")
+		if token == "" || err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 			c.Abort()
 			return
 		}
 
-		if len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
-		}
-
 		var userID string
-		err := db.QueryRow("SELECT user_id FROM sessions WHERE token = ? AND expires_time > ?", token, time.Now()).Scan(&userID)
+		err = db.QueryRow("SELECT user_id FROM sessions WHERE token = ? AND expires_time > ?", token, time.Now()).Scan(&userID)
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "无效或过期的 token"})
 			c.Abort()
