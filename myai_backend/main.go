@@ -190,7 +190,7 @@ func GetHistoryHandle(c *gin.Context) {
 		return
 	}
 
-	rows, err := db.Query("SELECT role, message, createtime FROM chat_histrory WHERE userid = ? ORDER BY createtime ASC ", userID)
+	rows, err := db.Query("SELECT role, message, create_time FROM chat_history WHERE user_id = ? ORDER BY create_time ASC ", userID)
 	if err != nil {
 		log.Printf("获取历史记录失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取历史记录失败"})

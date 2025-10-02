@@ -5,6 +5,25 @@ session = requests.Session()
 model_labels = ["deepseek-chat"]
 print(session.cookies)
 
+#显示历史记录
+def get_history():
+    url = "http://localhost:8080/history"
+    response = session.get(url)
+    if response.status_code == 200:
+        datas = response.json().get('history')
+        history = []
+        user_chat = None
+        for data in datas:
+            if data['role'] == 'user':
+                user_chat = data['message']
+            elif data['role'] == 'ai' and user_chat is not None:
+                history.append((user_chat, data['message']))
+                user_chat = None
+        return history
+    else:
+        return "获取历史记录失败"
+
+
 #模型选择
 def get_models():
     url = "http://localhost:8080/getModel"
@@ -105,6 +124,9 @@ with gr.Blocks() as demo:
 
     # 内容生成界面（改造成聊天框）
     chatbot = gr.Chatbot(label="对话历史")  # 聊天窗口
+    #查看历史记录
+    history_button = gr.Button("查看历史记录")
+    history_button.click(fn=get_history, outputs=chatbot)
     prompt_input = gr.Textbox(label="生成提示", placeholder="请输入要生成的内容提示")
 
     #模型选择
