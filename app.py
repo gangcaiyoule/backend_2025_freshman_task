@@ -4,6 +4,20 @@ import requests
 session = requests.Session()
 model_labels = ["deepseek-chat"]
 print(session.cookies)
+
+#模型选择
+def get_models():
+    url = "http://localhost:8080/getModel"
+    response = session.get(url)
+    if response.status_code == 200:
+        print(response.json())
+        available_models = response.json().get('availableModel', ["deepseek-chat"])
+        print(available_models)
+        return gr.Dropdown(choices=available_models, value=available_models[0])
+    else:
+        return gr.Dropdown(choices=["deepseek-chat"], value="deepseek-chat")
+
+
 # 注册函数
 def register(name, email, password):
     url = "http://localhost:8080/register"
@@ -39,7 +53,7 @@ def logout():
     else:
         return "登出失败"
 # 内容生成函数
-def generate_content(prompt, history, model="deepseek-chat"):
+def generate_content(prompt, history, model):
     url = "http://localhost:8080/generate"
     data = {
         "prompt": prompt,
@@ -49,11 +63,10 @@ def generate_content(prompt, history, model="deepseek-chat"):
     if response.status_code == 200:
         ai_response = response.json().get('result')
         history.append((prompt, ai_response))
-        return history
     else:
         error = response.json().get('error', "生成失败")
         history.append((prompt, "❌ " + error))
-        return history
+    return history
 
 def recharge():
     url = "http://localhost:8080/recharge"
@@ -93,12 +106,18 @@ with gr.Blocks() as demo:
     # 内容生成界面（改造成聊天框）
     chatbot = gr.Chatbot(label="对话历史")  # 聊天窗口
     prompt_input = gr.Textbox(label="生成提示", placeholder="请输入要生成的内容提示")
+
+    #模型选择
+    model_dropdown = gr.Dropdown(label="选择模型", choices=[])
+    refresh_models_button = gr.Button("刷新可用模型")
+    refresh_models_button.click(fn=get_models, outputs=model_dropdown)
     generate_button = gr.Button("生成内容")
 
     # 点击按钮时：更新对话框
+    print(model_dropdown)
     generate_button.click(
         generate_content,
-        inputs=[prompt_input, chatbot],
+        inputs=[prompt_input, chatbot, model_dropdown],
         outputs=chatbot
     )
 
