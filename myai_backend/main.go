@@ -119,7 +119,7 @@ func main() {
 	r.GET("/history", AuthMiddleware(), GetHistoryHandle)
 	r.POST("/recharge", AuthMiddleware(), ReCharge)
 	r.GET("/getModel", AuthMiddleware(), GetModel)
-	r.GET("/logout", logout)
+	r.POST("/logout", logout)
 
 	r.Run(":8080")
 }
@@ -138,7 +138,7 @@ func logout(c *gin.Context) {
 		return
 	}
 	c.SetCookie("session_token", "", -1, "/", "", false, true)
-
+	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }
 
 func GetModel(c *gin.Context) {

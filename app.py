@@ -31,6 +31,13 @@ def login(email, password):
     else:
         return f"登录失败: {response.json().get('error')}"
 
+def logout():
+    url = "http://localhost:8080/logout"
+    response = session.post(url)
+    if response.status_code == 200:
+        return "登出成功"
+    else:
+        return "登出失败"
 # 内容生成函数
 def generate_content(prompt, history, model="deepseek-chat"):
     url = "http://localhost:8080/generate"
@@ -55,6 +62,7 @@ def recharge():
         return "充值成功"
     else:
         return "充值失败"
+
 
 
 # Gradio 界面
@@ -99,5 +107,11 @@ with gr.Blocks() as demo:
         recharge_button = gr.Button("成为会员")
         recharge_output = gr.Textbox(label="充值结果")
         recharge_button.click(recharge, outputs=recharge_output)
+
+    # 登出按钮
+    with gr.Row():
+        logout_button = gr.Button("退出登录")
+        logout_output = gr.Textbox(label="登出结果")
+        logout_button.click(logout, outputs=logout_output)
 
 demo.launch(share=True)
