@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 聊天 Demo</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #chat { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; margin-bottom: 10px; }
+        .message { margin: 5px 0; }
+        .user { color: blue; }
+        .assistant { color: green; }
+        input, button { margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+<h1>AI 聊天 Demo</h1>
+
+<!-- 注册/登录 -->
+<div>
+    <input id="email" type="email" placeholder="邮箱">
+    <input id="password" type="password" placeholder="密码">
+    <button onclick="register()">注册</button>
+    <button onclick="login()">登录</button>
+</div>
+
+<!-- 查看用户信息 -->
+<div>
+    <button onclick="getUser()">获取用户信息</button>
+    <div id="userInfo"></div>
+</div>
+
+<!-- 聊天区域 -->
+<div id="chat"></div>
+<input id="prompt" type="text" placeholder="输入消息">
+<button onclick="sendMessage()">发送</button>
+
+<script>
+    let token = null;
+
+    // 注册
+    async function register() {
+        const res = await fetch('http://localhost:8080/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value
+            })
+        });
+        const data = await res.json();
+        if (res.status === 200) {
+            alert('注册成功，用户ID：' + data.user_id);
+        } else {
+            alert(JSON.stringify(data));
+        }
+    }
+
+    // 登录
+    async function login() {
+        const res = await fetch('http://localhost:8080/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value
+            })
+        });
+        const data = await res.json();
+        if (res.status === 200) {
+            token = data.token;
+            alert('登录成功！');
+        } else {
+            alert(JSON.stringify(data));
+        }
+    }
+
+    // 获取用户信息
+    async function getUser() {
+        if (!token) { alert('请先登录'); return; }
+        const res = await fetch('http://localhost:8080/getUserHandler', {
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (res.status === 200) {
+            document.getElementById('userInfo').textContent = `用户ID: ${data.user_id}, 邮箱: ${data.email}, 注册时间: ${data.create_time}`;
+        } else {
+            alert(JSON.stringify(data));
+        }
+    }
+
+    // 发送聊天消息
+    async function sendMessage() {
+        const prompt = document.getElementById('prompt').value;
+        if (!token) { alert('请先登录'); return; }
+        if (!prompt) { return; }
+
+        addMessage('user', prompt);
+
+        const res = await fetch('http://localhost:8080/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ prompt })
+        });
+
+        const data = await res.json();
+        if (res.status === 200) {
+            addMessage('assistant', data.result);
+        } else {
+            alert(JSON.stringify(data));
+        }
+    }
+
+    // 在页面显示消息
+    function addMessage(role, text) {
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+        div.textContent = (role === 'user' ? '我: ' : 'AI: ') + text;
+        document.getElementById('chat').appendChild(div);
+        document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+    }
+</script>
+
+</body>
+</html>
