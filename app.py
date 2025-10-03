@@ -25,25 +25,7 @@ def new_conversation():
         return f"成功新建新会话: {data.get('conversation_id')}-{data.get('title')}"
     else:
         return {}
-    
-#查询某个会话的历史记录
-# def load_conversation_history(conversation_id):
-#     url = f"http://localhost:8080/history/{conversation_id}"
-#     response = session.get(url)
-#     if response.status_code == 200:
-#         chat = []
-#         history = response.json().get('history')
-#         for h in history:
-#             if h['role'] == 'user':
-#                 chat.append((h['message'], None))
-#             else:
-#                 if chat[-1][1] is None and chat:
-#                     chat[-1] = (chat[-1][0], h["message"])
-#                 else:
-#                     chat.append((None, h['message']))
-#         return chat
-#     else:
-#         return [("获取该会话历史记录失败", None)]
+
 def load_conversation_history(conversation_id):
     url = f"http://localhost:8080/history/{conversation_id}"
     response = session.get(url)
@@ -73,23 +55,23 @@ def load_conversation_history(conversation_id):
     else:
         return [("获取该会话历史记录失败", None)]
 
-#显示历史记录
-def get_history():
-    url = "http://localhost:8080/history"
-    response = session.get(url)
-    if response.status_code == 200:
-        datas = response.json().get('history')
-        history = []
-        user_chat = None
-        for data in datas:
-            if data['role'] == 'user':
-                user_chat = data['message']
-            elif data['role'] == 'ai' and user_chat is not None:
-                history.append((user_chat, data['message']))
-                user_chat = None
-        return history
-    else:
-        return "获取历史记录失败"
+# #显示历史记录
+# def get_history():
+#     url = "http://localhost:8080/history"
+#     response = session.get(url)
+#     if response.status_code == 200:
+#         datas = response.json().get('history')
+#         history = []
+#         user_chat = None
+#         for data in datas:
+#             if data['role'] == 'user':
+#                 user_chat = data['message']
+#             elif data['role'] == 'ai' and user_chat is not None:
+#                 history.append((user_chat, data['message']))
+#                 user_chat = None
+#         return history
+#     else:
+#         return "获取历史记录失败"
 
 
 #模型选择

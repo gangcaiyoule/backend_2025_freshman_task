@@ -472,7 +472,7 @@ func GenerateHandler() gin.HandlerFunc {
 		log.Printf("用户 %s 请求生成内容", userID.(string))
 
 		// 1. 从数据库取最近 10 条历史记录
-		rows, err := db.Query("SELECT role, message FROM chat_history WHERE user_id = ? ORDER BY create_time ASC LIMIT 10", userID.(string))
+		rows, err := db.Query("SELECT role, message FROM chat_history WHERE user_id = ? AND conversation_id = ? ORDER BY create_time ASC LIMIT 10", userID.(string), reqBody.ConversationID)
 		if err != nil {
 			log.Printf("获取历史记录失败: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "获取历史记录失败"})
