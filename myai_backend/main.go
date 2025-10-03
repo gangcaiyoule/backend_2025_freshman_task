@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -22,8 +23,9 @@ var db *sql.DB
 
 // 定义请求和响应结构
 type RequestBody struct {
-	Prompt string `json:"prompt"`
-	Model  string `json:"model"`
+	Prompt         string `json:"prompt"`
+	Model          string `json:"model"`
+	ConversationID int    `json:"conversation_id"`
 }
 
 type ResponseBody struct {
@@ -119,11 +121,103 @@ func main() {
 	r.GET("/history", AuthMiddleware(), GetHistoryHandle)
 	r.POST("/recharge", AuthMiddleware(), ReCharge)
 	r.GET("/getModel", AuthMiddleware(), GetModel)
-	r.POST("/logout", logout)
+	r.POST("/logout", AuthMiddleware(), logout)
+	r.POST("/newConversation", AuthMiddleware(), NewConversation)
+	r.GET("/getConversation", AuthMiddleware(), GetConversation)
+	r.GET("/history/:conversation_id", AuthMiddleware(), GetHistory)
 
 	r.Run(":8080")
 }
 
+// 获取单个会话记录
+func GetHistory(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	convID := c.Param("conversation_id")
+	conversationID, err := strconv.Atoi(convID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversation_id 参数错误"})
+		return
+	}
+
+	rows, err := db.Query("SELECT role, message, create_time FROM chat_history WHERE user_id = ? AND conversation_id = ? ORDER BY create_time ASC", userID, conversationID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取历史失败"})
+		return
+	}
+	defer rows.Close()
+
+	var history []map[string]interface{}
+	for rows.Next() {
+		var role, message string
+		var createTime time.Time
+		if err := rows.Scan(&role, &message, &createTime); err != nil {
+			continue
+		}
+		history = append(history, gin.H{
+			"role":        role,
+			"message":     message,
+			"create_time": createTime,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"history": history})
+}
+
+// 获取该用户全部会话
+func GetConversation(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	rows, err := db.Query("SELECT id, title, create_time FROM conversations WHERE user_id = ?", userID)
+	if err != nil {
+		log.Printf("获取该用户的会话失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取该用户的会话失败"})
+		return
+	}
+	//释放空间
+	defer rows.Close()
+	//遍历该用户会话
+	var convs []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var title string
+		var create_time time.Time
+		if err := rows.Scan(&id, &title, &create_time); err != nil {
+			continue
+		}
+		convs = append(convs, gin.H{
+			"conversation_id": id,
+			"title":           title,
+			"create_time":     create_time,
+		})
+
+	}
+	c.JSON(http.StatusOK, gin.H{"conversations": convs})
+
+}
+
+// 新建会话
+func NewConversation(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	now := time.Now()
+	title := now.Format("2006-01-02 15:04:05")
+	res, err := db.Exec("INSERT INTO conversations (user_id, title, create_time) "+
+		"VALUES (?, ?, ?)", userID, title, now)
+	if err != nil {
+		log.Printf("创建会话失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建会话失败"})
+		return
+	}
+	id, _ := res.LastInsertId()
+	c.JSON(http.StatusOK, gin.H{"conversation_id": id, "title": title})
+}
+
+// 退出登录
 func logout(c *gin.Context) {
 	token, err := c.Cookie("session_token")
 	if err != nil {
@@ -422,12 +516,12 @@ func GenerateHandler() gin.HandlerFunc {
 			return
 		}
 
-		_, err = db.Exec("INSERT INTO chat_history (user_id, role, message, create_time) VALUES (?, ?, ?, ?)", userID, "user", reqBody.Prompt, time.Now())
+		_, err = db.Exec("INSERT INTO chat_history (user_id, conversation_id, role, message, create_time) VALUES (?, ?, ?, ?, ?)", userID, reqBody.ConversationID, "user", reqBody.Prompt, time.Now())
 		if err != nil {
 			log.Printf("保存用户聊天记录失败: %v", err)
 		}
 
-		_, err = db.Exec("INSERT INTO chat_history (user_id, role, message, create_time) VALUES (?, ?, ?, ?)", userID, "ai", result, time.Now())
+		_, err = db.Exec("INSERT INTO chat_history (user_id, conversation_id, role, message, create_time) VALUES (?, ?, ?, ?, ?)", userID, reqBody.ConversationID, "ai", result, time.Now())
 		if err != nil {
 			log.Printf("保存AI聊天记录失败: %v", err)
 		}
