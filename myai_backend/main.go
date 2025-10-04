@@ -36,7 +36,7 @@ type ResponseBody struct {
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
-	Password  string    `json:"-"` // 加密后的密码，不输出到JSON
+	Password  string    `json:"password"` // 加密后的密码，不输出到JSON
 	CreatedAt time.Time `json:"created_at"`
 	Name      string    `json:"name"`
 	IsVip     string    `json:"isVip"`
@@ -137,9 +137,64 @@ func main() {
 		admin.GET("/users", GetAllUsers)
 		admin.POST("/users", AddUsers)
 		admin.DELETE("/users/:id", DeleteUsers)
+		admin.PUT("/users/:id", EditUser)
 	}
 
 	r.Run(":8080")
+}
+
+func EditUser(c *gin.Context) {
+	userID := c.Param("id")
+	//检查ID是否存在
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
+	if err != nil {
+		log.Printf("通过该ID查询用户失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "通过该ID查询用户失败"})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusConflict, gin.H{"error": "无此ID"})
+		return
+	}
+	//查看传入参数
+	var user User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		log.Printf("请求参数错误: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+	//获取哈希加密密码
+	var password string
+	if user.Password != "" {
+		password, err = hashPassword(user.Password)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+			return
+		}
+	}
+
+	//编辑用户信息
+	_, err = db.Exec("UPDATE users "+
+		"SET email = ?, password = ?, name = ?, is_vip = ?, role = ? "+
+		"WHERE id = ?",
+		user.Email, password, user.Name, user.IsVip, user.Role, userID)
+	if err != nil {
+		log.Printf("编辑用户信息失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "编辑用户信息失败"})
+		return
+	}
+	//在返回中获取ID
+	err = db.QueryRow("SELECT id FROM users WHERE id = ?", userID).Scan(&user.ID)
+	if err != nil {
+		log.Printf("在返回中获取ID失败: %v", userID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "在返回中获取ID失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "编辑成功",
+		"user":    user,
+	})
 }
 
 func DeleteUsers(c *gin.Context) {
