@@ -136,9 +136,42 @@ func main() {
 	{
 		admin.GET("/users", GetAllUsers)
 		admin.POST("/users", AddUsers)
+		admin.DELETE("/users/:id", DeleteUsers)
 	}
 
 	r.Run(":8080")
+}
+
+func DeleteUsers(c *gin.Context) {
+	userID := c.Param("id")
+	//检查ID是否存在
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
+	if err != nil {
+		log.Printf("查询该ID是否存在失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询该ID是否存在失败"})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusConflict, gin.H{"error": "该ID用户不存在"})
+		return
+	}
+	//查询用户信息
+	var user User
+	db.QueryRow("SELECT id, email, password, created_time, name, is_vip, role FROM users WHERE id = ?", userID).Scan(
+		&user.ID, &user.Email, &user.Password, &user.CreatedAt, &user.Name, &user.IsVip, &user.Role)
+
+	_, err = db.Exec("DELETE FROM users WHERE id = ?", userID)
+	if err != nil {
+		log.Printf("删除该用户失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除该用户失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "删除成功",
+		"user":    user,
+	})
+
 }
 
 func AddUsers(c *gin.Context) {
