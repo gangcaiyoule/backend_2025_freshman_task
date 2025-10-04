@@ -38,6 +38,9 @@ type User struct {
 	Email     string    `json:"email"`
 	Password  string    `json:"-"` // 加密后的密码，不输出到JSON
 	CreatedAt time.Time `json:"created_at"`
+	Name      string    `json:"name"`
+	IsVip     string    `json:"isVip"`
+	Role      string    `json:"role"`
 }
 
 type Session struct {
@@ -132,9 +135,50 @@ func main() {
 	admin := r.Group("/admin", AuthMiddleware(), AdminMiddleware())
 	{
 		admin.GET("/users", GetAllUsers)
+		admin.POST("/users", AddUsers)
 	}
 
 	r.Run(":8080")
+}
+
+func AddUsers(c *gin.Context) {
+	var resp User
+	err := c.ShouldBindJSON(&resp)
+	if err != nil {
+		log.Printf("请求参数错误: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+	//验证邮箱是否已被注册
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)", resp.Email).Scan(&exists)
+	if err != nil {
+		log.Printf("查询该邮箱是否已被注册失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询该邮箱是否已被注册失败"})
+		return
+	}
+	if exists {
+		log.Printf("该邮箱已存在: ")
+		c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已被注册"})
+		return
+	}
+	//密码加密
+	hashPassword, err := hashPassword(resp.Password)
+	if err != nil {
+		log.Printf("密码哈希加密失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+		return
+	}
+	//生成ID
+	userID := generateID()
+	_, err = db.Exec("INSERT INTO users (id, email, password, created_time, name, is_vip, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		userID, resp.Email, hashPassword, time.Now(), resp.Name, resp.IsVip, resp.Role)
+	if err != nil {
+		log.Printf("添加用户失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "添加用户失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": "添加用户成功"})
 }
 
 func GetAllUsers(c *gin.Context) {
