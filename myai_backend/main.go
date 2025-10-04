@@ -73,6 +73,9 @@ type UserInfoResponse struct {
 	UserID     string    `json:"user_id"`
 	Email      string    `json:"email"`
 	CreateTime time.Time `json:"create_time"`
+	Name       string    `json:"name"`
+	IsVip      string    `json:"is_vip"`
+	Role       string    `json:"role"`
 }
 
 // 生成唯一ID
@@ -126,7 +129,34 @@ func main() {
 	r.GET("/getConversation", AuthMiddleware(), GetConversation)
 	r.GET("/history/:conversation_id", AuthMiddleware(), GetHistory)
 
+	admin := r.Group("/admin", AuthMiddleware(), AdminMiddleware())
+	{
+		admin.GET("/users", GetAllUsers)
+	}
+
 	r.Run(":8080")
+}
+
+func GetAllUsers(c *gin.Context) {
+	rows, err := db.Query("SELECT id, email, created_time, name, is_vip, role FROM users")
+	if err != nil {
+		log.Printf("查询账号信息失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询账号信息失败"})
+		return
+	}
+	db.Close()
+	var users []UserInfoResponse
+	for rows.Next() {
+		var resp UserInfoResponse
+		if err := rows.Scan(&resp.UserID, &resp.Email, &resp.CreateTime, &resp.Name, &resp.IsVip, &resp.Role); err != nil {
+			log.Printf("提取每行账户信息失败: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "提取每行账户信息失败"})
+			return
+		}
+		users = append(users, resp)
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
+
 }
 
 // 获取单个会话记录
@@ -416,6 +446,27 @@ func LoginHandler(c *gin.Context) {
 	})
 }
 
+// 管理员验证中间件
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+			c.Abort()
+			return
+		}
+		var role string
+		err := db.QueryRow("SELECT role FROM users WHERE id = ?", userID).Scan(&role)
+		if err != nil || role != "admin" {
+			log.Printf("查询用户身份失败: %v", err)
+			c.JSON(http.StatusForbidden, gin.H{"error": "没有权限"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 // 鉴权中间件
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -541,8 +592,8 @@ func GetUserHandler(c *gin.Context) {
 
 	// 查询用户信息
 	var resp UserInfoResponse
-	err := db.QueryRow("SELECT id, email, create_time FROM users WHERE id = ?", userID.(string)).
-		Scan(&resp.UserID, &resp.Email, &resp.CreateTime)
+	err := db.QueryRow("SELECT id, email, create_time, is_vip, role FROM users WHERE id = ?", userID.(string)).
+		Scan(&resp.UserID, &resp.Email, &resp.CreateTime, &resp.IsVip, &resp.Role)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
